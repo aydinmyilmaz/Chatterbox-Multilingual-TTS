@@ -491,6 +491,48 @@ async def list_references():
             })
     return {"files": files, "count": len(files)}
 
+@app.get("/get_reference_files", response_model=List[str], tags=["UI Helpers"])
+async def get_reference_files_api():
+    """
+    Returns a list of valid reference audio filenames (.wav, .mp3).
+    Backward compatibility endpoint for Chatterbox-TTS-Server.
+    """
+    logger.debug("Request for /get_reference_files.")
+    try:
+        files = []
+        for file_path in REFERENCE_AUDIO_DIR.glob("*"):
+            if file_path.is_file() and file_path.suffix.lower() in ['.wav', '.mp3']:
+                files.append(file_path.name)
+        return sorted(files)
+    except Exception as e:
+        logger.error(f"Error getting reference files for API: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve reference audio files."
+        )
+
+@app.get("/get_predefined_voices", response_model=List[Dict[str, str]], tags=["UI Helpers"])
+async def get_predefined_voices_api():
+    """
+    Returns a list of predefined voices with display names and filenames.
+    Backward compatibility endpoint for Chatterbox-TTS-Server.
+    """
+    logger.debug("Request for /get_predefined_voices.")
+    try:
+        voices = []
+        for file_path in REFERENCE_AUDIO_DIR.glob("*"):
+            if file_path.is_file() and file_path.suffix.lower() in ['.wav', '.mp3']:
+                voices.append({
+                    "id": file_path.name,
+                    "filename": file_path.name,
+                    "display_name": file_path.stem.replace("_", " ").title()
+                })
+        return sorted(voices, key=lambda x: x["filename"])
+    except Exception as e:
+        logger.error(f"Error getting predefined voices for API: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve predefined voices list."
+        )
+
 @app.post("/upload_reference", tags=["References"])
 async def upload_reference(
     file: UploadFile = File(..., description="Audio file to upload"),
