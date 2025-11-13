@@ -9,7 +9,7 @@ import random
 import numpy as np
 import torch
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 import logging
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -194,13 +194,14 @@ app.add_middleware(
 
 # Request models
 class TTSRequest(BaseModel):
-    text: str = Field(..., description="Text to synthesize (max 300 characters)", max_length=300)
+    text: str = Field(..., description="Text to synthesize (will be chunked if longer than 300 chars)")
     language_id: str = Field(..., description="Language code (e.g., en, tr, ar, fr)")
     reference_audio_filename: Optional[str] = Field(None, description="Filename of reference audio file (must be uploaded first via /upload_reference)")
     exaggeration: float = Field(0.5, ge=0.25, le=2.0, description="Speech expressiveness (0.25-2.0)")
     temperature: float = Field(0.8, ge=0.05, le=5.0, description="Randomness in generation (0.05-5.0)")
     seed: int = Field(0, description="Random seed (0 for random)")
     cfg_weight: float = Field(0.5, ge=0.0, le=1.0, description="CFG/Pace weight (0.2-1.0)")
+    chunk_size: Optional[int] = Field(300, ge=50, le=500, description="Chunk size for long texts (default: 300)")
 
 # Startup event - load model
 @app.on_event("startup")
@@ -382,7 +383,7 @@ async def generate_tts(request: TTSRequest):
         if request.seed != 0:
             set_seed(int(request.seed))
 
-        logger.info(f"Generating audio for text: '{request.text[:50]}...' (lang: {request.language_id})")
+        logger.info(f"Generating audio for text: '{request.text[:50]}...' (lang: {request.language_id}, length: {len(request.text)} chars)")
 
         # Resolve reference audio filename to full path
         audio_prompt_path = None
@@ -393,6 +394,15 @@ async def generate_tts(request: TTSRequest):
                     status_code=404,
                     detail=f"Reference audio file '{request.reference_audio_filename}' not found. Please upload it first via /upload_reference"
                 )
+
+        # Handle long texts by chunking
+        chunk_size_to_use = request.chunk_size if request.chunk_size is not None else 300
+        if len(request.text) > chunk_size_to_use:
+            logger.info(f"Text is long ({len(request.text)} chars), splitting into chunks of ~{chunk_size_to_use} chars")
+            text_chunks = chunk_text_by_sentences(request.text, chunk_size_to_use)
+        else:
+            text_chunks = [request.text]
+            logger.info("Processing text as a single chunk")
 
         # Prepare generation kwargs (same as Gradio app)
         generate_kwargs = {
@@ -406,22 +416,51 @@ async def generate_tts(request: TTSRequest):
         else:
             logger.info("No audio prompt provided - model will use its default voice")
 
-        # Generate audio (EXACT same code as Gradio app)
-        wav = current_model.generate(
-            request.text[:300],  # Truncate text to max chars (same as Gradio)
-            language_id=request.language_id,  # Same as Gradio app
-            **generate_kwargs
-        )
+        # Process each chunk and concatenate audio
+        all_audio_segments_np: List[np.ndarray] = []
+        engine_output_sample_rate: Optional[int] = None
 
-        # Convert to numpy array (same as Gradio app)
-        audio_np = wav.squeeze(0).numpy()
-        sample_rate = current_model.sr
+        for i, chunk in enumerate(text_chunks):
+            logger.info(f"Synthesizing chunk {i+1}/{len(text_chunks)} ({len(chunk)} chars)...")
 
-        logger.info(f"Audio generation complete. Sample rate: {sample_rate}Hz, Length: {len(audio_np)} samples")
+            # Set seed for first chunk only (or use same seed for consistency)
+            if i == 0 and request.seed != 0:
+                set_seed(int(request.seed))
+
+            # Generate audio for this chunk (max 300 chars per chunk as per model limit)
+            chunk_text = chunk[:300] if len(chunk) > 300 else chunk
+            wav = current_model.generate(
+                chunk_text,
+                language_id=request.language_id,
+                **generate_kwargs
+            )
+
+            # Convert to numpy array
+            chunk_audio_np = wav.squeeze(0).numpy()
+            chunk_sample_rate = current_model.sr
+
+            if engine_output_sample_rate is None:
+                engine_output_sample_rate = chunk_sample_rate
+            elif engine_output_sample_rate != chunk_sample_rate:
+                logger.warning(
+                    f"Inconsistent sample rate: chunk {i+1} ({chunk_sample_rate}Hz) "
+                    f"differs from previous ({engine_output_sample_rate}Hz). Using first chunk's SR."
+                )
+
+            all_audio_segments_np.append(chunk_audio_np)
+
+        # Concatenate all chunks
+        if len(all_audio_segments_np) > 1:
+            final_audio_np = np.concatenate(all_audio_segments_np)
+            logger.info(f"Concatenated {len(all_audio_segments_np)} audio chunks")
+        else:
+            final_audio_np = all_audio_segments_np[0]
+
+        logger.info(f"Audio generation complete. Sample rate: {engine_output_sample_rate}Hz, Length: {len(final_audio_np)} samples")
 
         # Create audio buffer
         audio_buffer = io.BytesIO()
-        sf.write(audio_buffer, audio_np, sample_rate, format="WAV")
+        sf.write(audio_buffer, final_audio_np, engine_output_sample_rate, format="WAV")
         audio_buffer.seek(0)
 
         return StreamingResponse(
@@ -429,7 +468,7 @@ async def generate_tts(request: TTSRequest):
             media_type="audio/wav",
             headers={
                 "Content-Disposition": f'attachment; filename="tts_output.wav"',
-                "X-Sample-Rate": str(sample_rate)
+                "X-Sample-Rate": str(engine_output_sample_rate)
             }
         )
 
