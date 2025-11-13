@@ -180,7 +180,7 @@ def resolve_audio_prompt(language_id: str, provided_path: str | None) -> str | N
     return LANGUAGE_CONFIG.get(language_id, {}).get("audio")
 
 
-@spaces.GPU
+# @spaces.GPU decorator only needed for Hugging Face Spaces (optional)
 def generate_tts_audio(
     text_input: str,
     language_id: str,
