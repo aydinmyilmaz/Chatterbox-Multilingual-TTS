@@ -318,4 +318,6 @@ with gr.Blocks() as demo:
         outputs=[audio_output],
     )
 
-demo.launch(mcp_server=True)
+import os
+port = int(os.getenv("PORT", 8004))
+demo.launch(server_name="0.0.0.0", server_port=port, share=False)
