@@ -1,0 +1,24 @@
+# Requirements for Coqui TTS (XTTS v2) API
+# Separate from Chatterbox TTS to avoid dependency conflicts
+
+# Core dependencies
+setuptools>=65.0.0
+numpy>=1.24.0,<1.26.0
+soundfile
+
+# FastAPI and web server
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+
+# Coqui TTS
+# Note: transformers==4.39.3 is required by TTS==0.22.0
+transformers==4.39.3
+TTS==0.22.0
+
+# PyTorch (will be installed separately based on CUDA availability)
+# torch
+# torchvision
+# torchaudio
+
