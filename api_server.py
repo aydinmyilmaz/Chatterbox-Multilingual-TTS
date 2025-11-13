@@ -391,10 +391,13 @@ async def root():
         "description": "FastAPI server using the same code as the working Gradio app",
         "endpoints": {
             "POST /generate": "Generate TTS audio",
+            "POST /upload_reference": "Upload reference audio file(s)",
+            "GET /reference_files": "List uploaded reference audio files",
             "GET /languages": "Get supported languages",
             "GET /health": "Health check"
         },
-        "supported_languages_count": len(SUPPORTED_LANGUAGES)
+        "supported_languages_count": len(SUPPORTED_LANGUAGES),
+        "note": "Only user-uploaded reference audio files are used. Default audio URLs are not used."
     }
 
 if __name__ == "__main__":
