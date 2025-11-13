@@ -80,10 +80,10 @@ if [ $? -eq 0 ]; then
     echo "📋 Next steps:"
     echo "   1. Activate virtual environment: source venv/bin/activate"
     echo "   2. Start server: python server.py"
-    echo "   3. Or with uvicorn: uvicorn server:app --host 0.0.0.0 --port 8000"
+    echo "   3. Or with uvicorn: uvicorn server:app --host 0.0.0.0 --port 8004"
     echo ""
-    echo "🌐 Server will be available at: http://localhost:8000"
-    echo "📖 API docs: http://localhost:8000/docs"
+    echo "🌐 Server will be available at: http://localhost:8004"
+    echo "📖 API docs: http://localhost:8004/docs"
 else
     echo ""
     echo -e "${RED}❌ Setup verification failed${NC}"

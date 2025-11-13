@@ -34,7 +34,7 @@ source venv/bin/activate
 python server.py
 ```
 
-Server will be available at `http://localhost:8000`
+Server will be available at `http://localhost:8004`
 
 ## 📁 Project Structure
 
@@ -105,7 +105,7 @@ name: "my_voice"  # optional
 1. Clone repository
 2. Run setup: `bash scripts/setup_runpod.sh`
 3. Start server: `python server.py`
-4. Server runs on port 8000 (or PORT env variable)
+4. Server runs on port 8004 (or PORT env variable)
 
 ## 📝 Notes
 

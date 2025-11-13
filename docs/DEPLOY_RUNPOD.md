@@ -32,7 +32,7 @@ python server.py
 Or with uvicorn:
 ```bash
 source venv/bin/activate
-uvicorn server:app --host 0.0.0.0 --port 8000
+uvicorn server:app --host 0.0.0.0 --port 8004
 ```
 
 ## 📋 Manual Setup (Alternative)
@@ -63,9 +63,9 @@ python server.py
 ## 🔧 RunPod Specific Configuration
 
 ### Port Configuration
-The server runs on port 8000 by default. To change:
+The server runs on port 8004 by default. To change:
 ```bash
-export PORT=8000
+export PORT=8004
 python server.py
 ```
 
@@ -87,15 +87,15 @@ tmux attach -t chatterbox_tts
 ## 🌐 API Endpoints
 
 Once running, access:
-- **API**: `http://localhost:8000`
-- **Docs**: `http://localhost:8000/docs`
-- **Health**: `http://localhost:8000/health`
+- **API**: `http://localhost:8004`
+- **Docs**: `http://localhost:8004/docs`
+- **Health**: `http://localhost:8004/health`
 
 ## 📝 Example Usage
 
 ### Generate Speech
 ```bash
-curl -X POST "http://localhost:8000/generate" \
+curl -X POST "http://localhost:8004/generate" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Hello world",
@@ -106,7 +106,7 @@ curl -X POST "http://localhost:8000/generate" \
 
 ### Upload Reference Audio
 ```bash
-curl -X POST "http://localhost:8000/upload_reference" \
+curl -X POST "http://localhost:8004/upload_reference" \
   -F "file=@my_voice.wav" \
   -F "name=my_voice"
 ```

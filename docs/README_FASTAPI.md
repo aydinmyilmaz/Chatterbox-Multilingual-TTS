@@ -29,7 +29,7 @@ python server.py
 
 Or with uvicorn:
 ```bash
-uvicorn server:app --host 0.0.0.0 --port 8000
+uvicorn server:app --host 0.0.0.0 --port 8004
 ```
 
 ### API Endpoints
@@ -82,7 +82,7 @@ import requests
 
 # Generate speech
 response = requests.post(
-    "http://localhost:8000/generate",
+    "http://localhost:8004/generate",
     json={
         "text": "Geçen ay YouTube kanalımızda iki milyar görüntüleme ile yeni bir dönüm noktasına ulaştık.",
         "language_id": "tr",
@@ -97,7 +97,7 @@ with open("output.wav", "wb") as f:
 
 ### cURL
 ```bash
-curl -X POST "http://localhost:8000/generate" \
+curl -X POST "http://localhost:8004/generate" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Hello world",
@@ -140,7 +140,7 @@ curl -X POST "http://localhost:8000/generate" \
    ```bash
    python server.py
    ```
-4. Server will be available on port 8000 (or PORT environment variable)
+4. Server will be available on port 8004 (or PORT environment variable)
 
 ## Notes
 

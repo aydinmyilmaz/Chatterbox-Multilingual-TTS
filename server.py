@@ -378,6 +378,6 @@ async def generate_tts(request: TTSRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", 8004))  # Default port 8004 (same as Chatterbox-TTS-Server)
     uvicorn.run(app, host="0.0.0.0", port=port)
 
