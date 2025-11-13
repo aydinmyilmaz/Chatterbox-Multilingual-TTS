@@ -157,24 +157,23 @@ def default_audio_for_ui(lang: str) -> Optional[str]:
     """Get default audio URL for a language."""
     return LANGUAGE_CONFIG.get(lang, {}).get("audio")
 
-def resolve_audio_prompt(language_id: str, provided_path: Optional[str]) -> Optional[str]:
+def resolve_audio_prompt(reference_filename: Optional[str]) -> Optional[str]:
     """
-    Decide which audio prompt to use:
-    - If user provided a path, use it (priority).
-    - We don't use default audio URLs - only user-uploaded files.
+    Resolve reference audio filename to full path.
+    - User provides only filename (e.g., "my_voice.wav")
+    - We match it with files in reference_audio directory
+    - Returns full path if found, None otherwise
     """
-    if provided_path and str(provided_path).strip():
-        # Check if it's a local file path
-        local_path = Path(provided_path)
-        if local_path.exists():
-            return str(local_path)
-        # Check if it's in reference_audio directory
-        ref_path = REFERENCE_AUDIO_DIR / local_path.name
-        if ref_path.exists():
+    if reference_filename and str(reference_filename).strip():
+        # Sanitize filename (remove path components if any)
+        filename = Path(reference_filename).name
+        # Check if file exists in reference_audio directory
+        ref_path = REFERENCE_AUDIO_DIR / filename
+        if ref_path.exists() and ref_path.is_file():
             return str(ref_path)
-        # Otherwise assume it's a URL or absolute path
-        return provided_path
-    # Don't use default audio URLs - only user-uploaded files
+        else:
+            logger.warning(f"Reference audio file not found: {filename}")
+            return None
     return None
 
 # Reference audio storage
@@ -197,7 +196,7 @@ app.add_middleware(
 class TTSRequest(BaseModel):
     text: str = Field(..., description="Text to synthesize (max 300 characters)", max_length=300)
     language_id: str = Field(..., description="Language code (e.g., en, tr, ar, fr)")
-    audio_prompt_path: Optional[str] = Field(None, description="Path or URL to reference audio file")
+    reference_audio_filename: Optional[str] = Field(None, description="Filename of reference audio file (must be uploaded first via /upload_reference)")
     exaggeration: float = Field(0.5, ge=0.25, le=2.0, description="Speech expressiveness (0.25-2.0)")
     temperature: float = Field(0.8, ge=0.05, le=5.0, description="Randomness in generation (0.05-5.0)")
     seed: int = Field(0, description="Random seed (0 for random)")
@@ -234,14 +233,22 @@ async def get_languages():
         "count": len(SUPPORTED_LANGUAGES)
     }
 
-# Upload reference audio
+# Upload reference audio (max 50 files at once)
 @app.post("/upload_reference")
 async def upload_reference(files: list[UploadFile] = File(...)):
     """
     Upload reference audio file(s) for voice cloning.
+    Maximum 50 files can be uploaded at once.
     Files are stored in the reference_audio directory.
     Supported formats: WAV, MP3, FLAC, etc.
     """
+    # Check max files limit
+    if len(files) > 50:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum 50 files allowed per upload. Received {len(files)} files."
+        )
+
     uploaded_files = []
     upload_errors = []
 
@@ -333,8 +340,15 @@ async def generate_tts(request: TTSRequest):
 
         logger.info(f"Generating audio for text: '{request.text[:50]}...' (lang: {request.language_id})")
 
-        # Handle optional audio prompt (only user-uploaded files, no default URLs)
-        chosen_prompt = resolve_audio_prompt(request.language_id, request.audio_prompt_path)
+        # Resolve reference audio filename to full path
+        audio_prompt_path = None
+        if request.reference_audio_filename:
+            audio_prompt_path = resolve_audio_prompt(request.reference_audio_filename)
+            if not audio_prompt_path:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Reference audio file '{request.reference_audio_filename}' not found. Please upload it first via /upload_reference"
+                )
 
         # Prepare generation kwargs (same as Gradio app)
         generate_kwargs = {
@@ -342,9 +356,9 @@ async def generate_tts(request: TTSRequest):
             "temperature": request.temperature,
             "cfg_weight": request.cfg_weight,
         }
-        if chosen_prompt:
-            generate_kwargs["audio_prompt_path"] = chosen_prompt
-            logger.info(f"Using audio prompt: {chosen_prompt}")
+        if audio_prompt_path:
+            generate_kwargs["audio_prompt_path"] = audio_prompt_path
+            logger.info(f"Using audio prompt: {audio_prompt_path}")
         else:
             logger.info("No audio prompt provided - model will use its default voice")
 
