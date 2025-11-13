@@ -436,7 +436,9 @@ async def generate_tts(request: TTSRequest):
         engine_output_sample_rate: Optional[int] = None
 
         for i, chunk in enumerate(text_chunks):
-            logger.info(f"Synthesizing chunk {i+1}/{len(text_chunks)} ({len(chunk)} chars)...")
+            # Log chunk preview with proper encoding for Turkish characters
+            chunk_preview = chunk[:30].encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+            logger.info(f"Synthesizing chunk {i+1}/{len(text_chunks)} ({len(chunk)} chars): '{chunk_preview}...'")
 
             # Set seed for first chunk only (or use same seed for consistency)
             if i == 0 and request.seed != 0:
