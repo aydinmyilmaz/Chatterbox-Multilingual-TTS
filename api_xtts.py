@@ -273,90 +273,161 @@ async def get_predefined_voices_api():
             status_code=500, detail="Failed to retrieve predefined voices list."
         )
 
-# Generate TTS
+# Generate TTS (same endpoint structure as Chatterbox TTS)
 @app.post("/tts")
-async def generate_tts(request: XTTSRequest):
+async def generate_tts(request: TTSRequest):
     """
     Generate speech using Coqui TTS (XTTS v2).
+    Same endpoint structure as Chatterbox TTS for client compatibility.
     """
     try:
-        # Validate language
-        if request.language.lower() not in SUPPORTED_LANGUAGES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported language '{request.language}'. Supported: {', '.join(SUPPORTED_LANGUAGES.keys())}"
-            )
-
+        # Validate language (map language_id to XTTS language codes)
+        language_id_lower = request.language_id.lower()
+        
+        # Map Chatterbox language codes to XTTS language codes
+        language_mapping = {
+            "en": "en",
+            "es": "es",
+            "fr": "fr",
+            "de": "de",
+            "it": "it",
+            "pt": "pt",
+            "pl": "pl",
+            "tr": "tr",
+            "ru": "ru",
+            "nl": "nl",
+            "ar": "ar",
+            "zh": "zh-cn",
+            "ja": "ja",
+            "ko": "ko",
+        }
+        
+        xtts_language = language_mapping.get(language_id_lower)
+        if not xtts_language:
+            # Try direct match
+            if language_id_lower not in SUPPORTED_LANGUAGES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported language_id '{request.language_id}'. Supported: {', '.join(language_mapping.keys())}"
+                )
+            xtts_language = language_id_lower
+        
         # Get model
         tts_model = get_or_load_model()
         if tts_model is None:
             raise HTTPException(status_code=503, detail="TTS model is not loaded")
-
-        # Resolve speaker audio path
-        speaker_wav_path = None
-        if request.speaker_wav_filename:
-            speaker_path = REFERENCE_AUDIO_DIR / request.speaker_wav_filename
-            if not speaker_path.exists():
+        
+        # Resolve reference audio filename to full path (same as Chatterbox TTS)
+        audio_prompt_path = None
+        if request.reference_audio_filename:
+            audio_prompt_path = resolve_audio_prompt(request.reference_audio_filename)
+            if not audio_prompt_path:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Speaker audio file '{request.speaker_wav_filename}' not found. Please upload it first via /upload_speaker"
+                    detail=f"Reference audio file '{request.reference_audio_filename}' not found. Please upload it first via /upload_reference"
                 )
-            speaker_wav_path = str(speaker_path)
-
-        if not speaker_wav_path:
+        
+        if not audio_prompt_path:
             raise HTTPException(
                 status_code=400,
-                detail="speaker_wav_filename is required for XTTS v2"
+                detail="reference_audio_filename is required for XTTS v2"
             )
-
-        logger.info(f"Generating audio for text: '{request.text[:50]}...' (lang: {request.language})")
-
-        # Generate audio using TTS
-        # XTTS v2 requires speaker_wav, so we use tts_to_file and read it back
-        import tempfile
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
-            tmp_path = tmp_file.name
-
-        try:
-            tts_model.tts_to_file(
-                text=request.text,
-                file_path=tmp_path,
-                speaker_wav=speaker_wav_path,
-                language=request.language.lower()
-            )
-
-            # Read generated audio
-            audio_data, sample_rate = sf.read(tmp_path)
-
-            # Convert to mono if stereo
-            if len(audio_data.shape) > 1:
-                audio_data = audio_data[:, 0]
-
-            logger.info(f"Audio generation complete. Sample rate: {sample_rate}Hz, Length: {len(audio_data)} samples")
-
-            # Create audio buffer
-            audio_buffer = io.BytesIO()
-            sf.write(audio_buffer, audio_data, sample_rate, format="WAV")
-            audio_buffer.seek(0)
-
-            return StreamingResponse(
-                audio_buffer,
-                media_type="audio/wav",
-                headers={
-                    "Content-Disposition": f'attachment; filename="xtts_output.wav"',
-                    "X-Sample-Rate": str(sample_rate)
-                }
-            )
-        finally:
-            # Clean up temp file
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-
+        
+        # Handle long texts by chunking (same as Chatterbox TTS)
+        chunk_size_to_use = request.chunk_size if request.chunk_size is not None else 300
+        if len(request.text) > chunk_size_to_use:
+            logger.info(f"Text is long ({len(request.text)} chars), splitting into chunks of ~{chunk_size_to_use} chars")
+            # Simple chunking by sentences
+            sentences = re.split(r'[.!?]+', request.text)
+            text_chunks = []
+            current_chunk = ""
+            for sentence in sentences:
+                sentence = sentence.strip()
+                if not sentence:
+                    continue
+                if len(current_chunk) + len(sentence) + 1 <= chunk_size_to_use:
+                    current_chunk += sentence + ". "
+                else:
+                    if current_chunk:
+                        text_chunks.append(current_chunk.strip())
+                    current_chunk = sentence + ". "
+            if current_chunk:
+                text_chunks.append(current_chunk.strip())
+        else:
+            text_chunks = [request.text]
+        
+        logger.info(f"Generating audio for text: '{request.text[:50]}...' (lang: {request.language_id}, chunks: {len(text_chunks)})")
+        
+        # Process each chunk and concatenate audio
+        all_audio_segments = []
+        sample_rate = None
+        
+        for i, chunk in enumerate(text_chunks):
+            logger.info(f"Synthesizing chunk {i+1}/{len(text_chunks)} ({len(chunk)} chars)...")
+            
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                tmp_path = tmp_file.name
+            
+            try:
+                tts_model.tts_to_file(
+                    text=chunk[:300] if len(chunk) > 300 else chunk,  # XTTS also has 300 char limit
+                    file_path=tmp_path,
+                    speaker_wav=audio_prompt_path,
+                    language=xtts_language
+                )
+                
+                # Read generated audio
+                chunk_audio_data, chunk_sample_rate = sf.read(tmp_path)
+                
+                # Convert to mono if stereo
+                if len(chunk_audio_data.shape) > 1:
+                    chunk_audio_data = chunk_audio_data[:, 0]
+                
+                if sample_rate is None:
+                    sample_rate = chunk_sample_rate
+                
+                all_audio_segments.append(chunk_audio_data)
+            finally:
+                # Clean up temp file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+        
+        # Concatenate all chunks
+        if len(all_audio_segments) > 1:
+            final_audio = np.concatenate(all_audio_segments)
+            logger.info(f"Concatenated {len(all_audio_segments)} audio chunks")
+        else:
+            final_audio = all_audio_segments[0]
+        
+        logger.info(f"Audio generation complete. Sample rate: {sample_rate}Hz, Length: {len(final_audio)} samples")
+        
+        # Create audio buffer
+        audio_buffer = io.BytesIO()
+        sf.write(audio_buffer, final_audio, sample_rate, format="WAV")
+        audio_buffer.seek(0)
+        
+        return StreamingResponse(
+            audio_buffer,
+            media_type="audio/wav",
+            headers={
+                "Content-Disposition": f'attachment; filename="tts_output.wav"',
+                "X-Sample-Rate": str(sample_rate)
+            }
+        )
+    
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error generating TTS: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to generate audio: {str(e)}")
+
+# Alias endpoint for backward compatibility
+@app.post("/generate")
+async def generate_tts_alias(request: TTSRequest):
+    """
+    Alias for /tts endpoint (backward compatibility).
+    """
+    return await generate_tts(request)
 
 # Root endpoint
 @app.get("/")
