@@ -363,9 +363,6 @@ async def generate_tts(request: TTSRequest):
     """
     Generate TTS audio - main endpoint (backward compatible with old API).
     Uses the same code as the working Gradio app.
-    """
-    """
-    Generate speech audio from text using the same code as the working Gradio app.
     This ensures Turkish/Arabic audio quality matches the Gradio app.
     """
     try:
