@@ -358,8 +358,12 @@ async def get_predefined_voices_api():
         )
 
 # Generate TTS endpoint (using same code as Gradio app)
-@app.post("/generate")
+@app.post("/tts")
 async def generate_tts(request: TTSRequest):
+    """
+    Generate TTS audio - main endpoint (backward compatible with old API).
+    Uses the same code as the working Gradio app.
+    """
     """
     Generate speech audio from text using the same code as the working Gradio app.
     This ensures Turkish/Arabic audio quality matches the Gradio app.
@@ -438,6 +442,14 @@ async def generate_tts(request: TTSRequest):
         logger.error(f"Error generating TTS: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to generate audio: {str(e)}")
 
+# Alias endpoint for backward compatibility
+@app.post("/generate")
+async def generate_tts_alias(request: TTSRequest):
+    """
+    Alias for /tts endpoint (backward compatibility).
+    """
+    return await generate_tts(request)
+
 # Root endpoint
 @app.get("/")
 async def root():
@@ -447,7 +459,8 @@ async def root():
         "version": "1.0.0",
         "description": "FastAPI server using the same code as the working Gradio app",
         "endpoints": {
-            "POST /generate": "Generate TTS audio",
+            "POST /tts": "Generate TTS audio (main endpoint)",
+            "POST /generate": "Generate TTS audio (alias for /tts)",
             "POST /upload_reference": "Upload reference audio file(s)",
             "GET /reference_files": "List uploaded reference audio files",
             "GET /get_reference_files": "List reference files (backward compatibility)",
