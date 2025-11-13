@@ -21,8 +21,21 @@ import soundfile as sf
 # Import from Gradio app (same working code)
 from src.chatterbox.mtl_tts import ChatterboxMultilingualTTS, SUPPORTED_LANGUAGES
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+# Setup logging with UTF-8 encoding support
+import sys
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+# Ensure UTF-8 encoding for logging
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
+
 logger = logging.getLogger(__name__)
 
 # Device configuration (same as Gradio app)
@@ -383,7 +396,9 @@ async def generate_tts(request: TTSRequest):
         if request.seed != 0:
             set_seed(int(request.seed))
 
-        logger.info(f"Generating audio for text: '{request.text[:50]}...' (lang: {request.language_id}, length: {len(request.text)} chars)")
+        # Log text with proper encoding (show first 50 chars, handle Unicode properly)
+        text_preview = request.text[:50].encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+        logger.info(f"Generating audio for text: '{text_preview}...' (lang: {request.language_id}, length: {len(request.text)} chars)")
 
         # Resolve reference audio filename to full path
         audio_prompt_path = None
