@@ -10,7 +10,7 @@ Chatterbox-Multilingual-TTS/
 ├── .gitignore                  # Git ignore rules
 │
 ├── scripts/                    # Setup and utility scripts
-│   └── setup_runpod.sh        # RunPod deployment setup
+│   └── setup.sh               # Complete setup script (clone + UV + Rust + dependencies + server start)
 │
 ├── docs/                       # Documentation
 │   └── README_FASTAPI.md      # Detailed API documentation
@@ -41,7 +41,7 @@ Chatterbox-Multilingual-TTS/
 - **requirements.txt**: Original Gradio dependencies
 
 ### Scripts
-- **scripts/setup_runpod.sh**: Automated setup script for RunPod deployment
+- **scripts/setup.sh**: Complete automated setup script for RunPod deployment (clones repo, installs dependencies, and starts server)
 
 ### Documentation
 - **README.md**: Main project documentation

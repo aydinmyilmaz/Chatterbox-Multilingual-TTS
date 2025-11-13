@@ -12,19 +12,18 @@ cd /workspace
 git clone https://github.com/YOUR_USERNAME/Chatterbox-Multilingual-TTS.git
 cd Chatterbox-Multilingual-TTS
 
-# 2. Run setup script
-bash scripts/setup_runpod.sh
+# 2. Run setup script (clones repo, installs dependencies, and starts server automatically)
+bash scripts/setup.sh
 
-# 3. Start server
-source venv/bin/activate
-python server.py
+# Server is already running in tmux session after setup!
+# To manually start: source venv/bin/activate && python server.py
 ```
 
 ### Local Installation
 
 ```bash
 # Run setup script
-bash scripts/setup_runpod.sh
+bash scripts/setup.sh
 ```
 
 ### Start Server
@@ -44,9 +43,7 @@ Server will be available at `http://localhost:8004`
 ├── requirements_fastapi.txt  # FastAPI dependencies
 ├── requirements.txt          # Original Gradio dependencies
 ├── scripts/
-│   ├── setup_runpod.sh      # Setup script (dependencies installation)
-│   ├── RUNPOD_SETUP.sh      # RunPod full setup (clone + setup)
-│   └── GITHUB_PUSH.sh       # GitHub push helper script
+│   └── setup.sh             # Complete setup script (clone + UV + Rust + dependencies + server start)
 ├── docs/
 │   ├── README_FASTAPI.md    # Detailed API documentation
 │   ├── DEPLOY_RUNPOD.md     # RunPod deployment guide
@@ -102,10 +99,15 @@ name: "my_voice"  # optional
 
 ## 🐳 RunPod Deployment
 
-1. Clone repository
-2. Run setup: `bash scripts/setup_runpod.sh`
-3. Start server: `python server.py`
-4. Server runs on port 8004 (or PORT env variable)
+**One-command setup:**
+```bash
+bash <(curl -s https://raw.githubusercontent.com/aydinmyilmaz/Chatterbox-Multilingual-TTS/main/scripts/setup.sh)
+```
+
+Or manually:
+1. Clone repository: `git clone https://github.com/aydinmyilmaz/Chatterbox-Multilingual-TTS.git`
+2. Run setup: `bash scripts/setup.sh` (clones, installs dependencies, and starts server automatically)
+3. Server runs on port 8004 (or PORT env variable) in tmux session
 
 ## 📝 Notes
 

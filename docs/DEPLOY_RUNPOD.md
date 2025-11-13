@@ -13,17 +13,39 @@ cd Chatterbox-Multilingual-TTS
 ### 2. Run Setup Script
 
 ```bash
-bash setup_runpod.sh
+bash scripts/setup.sh
 ```
 
 This script will:
+- Clone repository (if not exists) or pull latest changes
+- Install UV (fast Python package manager) and Rust
 - Create virtual environment
 - Install PyTorch with CUDA support
 - Install all dependencies
 - Verify installation
+- Auto-detect RunPod URLs
+- Start server in tmux session automatically
 
-### 3. Start Server
+### 3. Server Status
 
+The server is automatically started in a tmux session named `chatterbox_multilingual_tts` after setup completes.
+
+**To check server status:**
+```bash
+tmux has-session -t chatterbox_multilingual_tts && echo "✅ Server is running" || echo "❌ Server is not running"
+```
+
+**To view logs:**
+```bash
+tail -f /workspace/server.log
+```
+
+**To attach to server session:**
+```bash
+tmux attach -t chatterbox_multilingual_tts
+```
+
+**To manually start server (if needed):**
 ```bash
 source venv/bin/activate
 python server.py
