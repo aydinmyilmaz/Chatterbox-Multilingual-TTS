@@ -1,0 +1,33 @@
+# FastAPI requirements for Chatterbox Multilingual TTS
+# Based on HF Space requirements but adapted for FastAPI
+
+# Core dependencies
+numpy==1.26.0
+resampy==0.4.3
+librosa==0.10.0
+s3tokenizer
+transformers==4.46.3
+diffusers==0.29.0
+omegaconf==2.3.0
+resemble-perth==1.0.1
+silero-vad==5.1.2
+conformer==0.3.2
+safetensors
+
+# FastAPI and web server
+fastapi
+uvicorn[standard]
+python-multipart
+soundfile
+
+# PyTorch (will be installed separately based on CUDA availability)
+# torch
+# torchvision
+# torchaudio
+
+# Optional language-specific dependencies
+# spacy_pkuseg          # For Chinese text segmentation
+# pykakasi>=2.2.0       # For Japanese text processing (Kanji to Hiragana)
+# russian-text-stresser @ git+https://github.com/Vuizur/add-stress-to-epub
+# dicta-onnx>=0.1.0     # For Hebrew diacritization
+

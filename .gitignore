@@ -46,3 +46,19 @@ checkpoints/
 
 # Ignore generated sample .wav files
 **/*.wav
+
+# Reference audio files (keep directory structure)
+reference_audio/*
+!reference_audio/.gitkeep
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Logs
+*.log
+
+# Model cache
+.cache/
+models/
