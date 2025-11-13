@@ -3,7 +3,11 @@ import numpy as np
 import torch
 from src.chatterbox.mtl_tts import ChatterboxMultilingualTTS, SUPPORTED_LANGUAGES
 import gradio as gr
-import spaces
+# spaces module is only needed for Hugging Face Spaces deployment
+try:
+    import spaces
+except ImportError:
+    spaces = None  # Not available on RunPod, skip decorator
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"🚀 Running on device: {DEVICE}")
