@@ -4,7 +4,23 @@ FastAPI version of the Chatterbox Multilingual TTS, converted from Gradio for Ru
 
 ## 🚀 Quick Start
 
-### Installation
+### RunPod Deployment (Recommended)
+
+```bash
+# 1. Clone repository
+cd /workspace
+git clone https://github.com/YOUR_USERNAME/Chatterbox-Multilingual-TTS.git
+cd Chatterbox-Multilingual-TTS
+
+# 2. Run setup script
+bash scripts/setup_runpod.sh
+
+# 3. Start server
+source venv/bin/activate
+python server.py
+```
+
+### Local Installation
 
 ```bash
 # Run setup script
@@ -29,9 +45,13 @@ Server will be available at `http://localhost:8000`
 ├── requirements.txt          # Original Gradio requirements
 ├── requirements_fastapi.txt  # FastAPI requirements
 ├── scripts/
-│   └── setup_runpod.sh      # RunPod setup script
+│   ├── setup_runpod.sh      # Setup script (dependencies installation)
+│   ├── RUNPOD_SETUP.sh      # RunPod full setup (clone + setup)
+│   └── GITHUB_PUSH.sh       # GitHub push helper script
 ├── docs/
-│   └── README_FASTAPI.md    # Detailed API documentation
+│   ├── README_FASTAPI.md    # Detailed API documentation
+│   ├── DEPLOY_RUNPOD.md     # RunPod deployment guide
+│   └── PROJECT_STRUCTURE.md  # Project structure documentation
 └── src/
     └── chatterbox/          # Core TTS implementation
 ```
@@ -75,7 +95,9 @@ name: "my_voice"  # optional
 
 ## 📖 Documentation
 
-For detailed API documentation, see [docs/README_FASTAPI.md](docs/README_FASTAPI.md)
+- **[docs/README_FASTAPI.md](docs/README_FASTAPI.md)** - Detailed API documentation
+- **[docs/DEPLOY_RUNPOD.md](docs/DEPLOY_RUNPOD.md)** - RunPod deployment guide
+- **[docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)** - Project structure details
 
 ## 🐳 RunPod Deployment
 

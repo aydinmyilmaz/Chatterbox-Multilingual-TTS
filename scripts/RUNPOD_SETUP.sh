@@ -36,7 +36,7 @@ fi
 # Run setup script
 echo ""
 echo "🔧 Setup script çalıştırılıyor..."
-bash setup_runpod.sh
+bash scripts/setup_runpod.sh
 
 echo ""
 echo "✅ Kurulum tamamlandı!"
