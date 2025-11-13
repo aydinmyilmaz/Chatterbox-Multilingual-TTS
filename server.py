@@ -9,7 +9,7 @@ import random
 import numpy as np
 import torch
 from pathlib import Path
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict
 import logging
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
@@ -320,6 +320,87 @@ async def upload_reference(
         logger.error(f"Error uploading reference audio: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
+@app.post("/upload_predefined_voice", tags=["File Management"])
+async def upload_predefined_voice_endpoint(files: List[UploadFile] = File(...)):
+    """
+    Upload predefined voice files (backward compatibility with Chatterbox-TTS-Server).
+    Files are stored in the reference_audio directory (simplified structure).
+    """
+    uploaded_filenames_successfully: List[str] = []
+    upload_errors: List[Dict[str, str]] = []
+
+    for file in files:
+        if not file.filename:
+            upload_errors.append(
+                {"filename": "Unknown", "error": "File received with no filename."}
+            )
+            logger.warning("Upload attempt for predefined voice with no filename.")
+            continue
+
+        # Sanitize filename
+        safe_filename = file.filename.replace(" ", "_").replace("/", "_").replace("\\", "_")
+        destination_path = REFERENCE_AUDIO_DIR / safe_filename
+
+        try:
+            # Validate file type
+            if not (
+                safe_filename.lower().endswith(".wav")
+                or safe_filename.lower().endswith(".mp3")
+            ):
+                raise ValueError(
+                    "Invalid file type. Only .wav and .mp3 are allowed for predefined voices."
+                )
+
+            if destination_path.exists():
+                logger.info(
+                    f"Predefined voice file '{safe_filename}' already exists. Skipping duplicate upload."
+                )
+                if safe_filename not in uploaded_filenames_successfully:
+                    uploaded_filenames_successfully.append(safe_filename)
+                continue
+
+            # Save file
+            with open(destination_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+
+            logger.info(
+                f"Successfully saved uploaded predefined voice file to: {destination_path}"
+            )
+            uploaded_filenames_successfully.append(safe_filename)
+
+        except Exception as e_upload:
+            error_msg = f"Error processing predefined voice file '{file.filename}': {str(e_upload)}"
+            logger.error(error_msg, exc_info=True)
+            upload_errors.append({"filename": file.filename, "error": str(e_upload)})
+        finally:
+            await file.close()
+
+    # Get all current reference audio files (as predefined voices)
+    all_files = []
+    for file_path in REFERENCE_AUDIO_DIR.glob("*"):
+        if file_path.is_file():
+            all_files.append({
+                "id": file_path.name,
+                "filename": file_path.name,
+                "path": str(file_path.relative_to(Path(".")))
+            })
+
+    response_data = {
+        "message": f"Processed {len(files)} predefined voice file(s).",
+        "uploaded_files": uploaded_filenames_successfully,
+        "all_predefined_voices": all_files,
+        "errors": upload_errors,
+    }
+    status_code = (
+        200 if not upload_errors or len(uploaded_filenames_successfully) > 0 else 400
+    )
+    if upload_errors:
+        logger.warning(
+            f"Upload to /upload_predefined_voice completed with {len(upload_errors)} error(s)."
+        )
+    return JSONResponse(content=response_data, status_code=status_code)
+
 @app.post("/generate", tags=["TTS"])
 async def generate_tts(request: TTSRequest):
     """
@@ -444,7 +525,7 @@ async def legacy_tts_endpoint(request: CustomTTSRequest):
             if current_chunk:
                 chunks.append(current_chunk.strip())
             text_to_synthesize = chunks[0] if chunks else text_to_synthesize  # Use first chunk for simplicity
-        
+
         # Convert to TTSRequest format
         tts_request = TTSRequest(
             text=text_to_synthesize[:300],  # Max 300 chars
@@ -455,10 +536,10 @@ async def legacy_tts_endpoint(request: CustomTTSRequest):
             seed=request.seed or 0,
             cfg_weight=request.cfg_weight or 0.5
         )
-        
+
         # Call generate endpoint
         return await generate_tts(tts_request)
-        
+
     except HTTPException:
         raise
     except Exception as e:
