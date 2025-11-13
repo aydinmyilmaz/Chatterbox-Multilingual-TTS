@@ -314,6 +314,49 @@ async def get_reference_files():
             files.append(file_path.name)
     return sorted(files)
 
+# Backward compatibility endpoints (for old UI clients)
+@app.get("/get_reference_files")
+async def get_reference_files_api():
+    """
+    Returns a list of valid reference audio filenames (.wav, .mp3).
+    Backward compatibility endpoint for Chatterbox-TTS-Server.
+    """
+    logger.debug("Request for /get_reference_files.")
+    try:
+        files = []
+        for file_path in REFERENCE_AUDIO_DIR.glob("*"):
+            if file_path.is_file() and file_path.suffix.lower() in ['.wav', '.mp3', '.flac', '.ogg', '.m4a']:
+                files.append(file_path.name)
+        return sorted(files)
+    except Exception as e:
+        logger.error(f"Error getting reference files for API: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve reference audio files."
+        )
+
+@app.get("/get_predefined_voices")
+async def get_predefined_voices_api():
+    """
+    Returns a list of predefined voices with display names and filenames.
+    Backward compatibility endpoint for Chatterbox-TTS-Server.
+    """
+    logger.debug("Request for /get_predefined_voices.")
+    try:
+        voices = []
+        for file_path in REFERENCE_AUDIO_DIR.glob("*"):
+            if file_path.is_file() and file_path.suffix.lower() in ['.wav', '.mp3', '.flac', '.ogg', '.m4a']:
+                voices.append({
+                    "id": file_path.name,
+                    "filename": file_path.name,
+                    "display_name": file_path.stem.replace("_", " ").title()
+                })
+        return sorted(voices, key=lambda x: x["filename"])
+    except Exception as e:
+        logger.error(f"Error getting predefined voices for API: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve predefined voices list."
+        )
+
 # Generate TTS endpoint (using same code as Gradio app)
 @app.post("/generate")
 async def generate_tts(request: TTSRequest):
@@ -407,6 +450,8 @@ async def root():
             "POST /generate": "Generate TTS audio",
             "POST /upload_reference": "Upload reference audio file(s)",
             "GET /reference_files": "List uploaded reference audio files",
+            "GET /get_reference_files": "List reference files (backward compatibility)",
+            "GET /get_predefined_voices": "List predefined voices (backward compatibility)",
             "GET /languages": "Get supported languages",
             "GET /health": "Health check"
         },
