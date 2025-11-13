@@ -40,10 +40,9 @@ Server will be available at `http://localhost:8000`
 
 ```
 .
-├── server.py                 # FastAPI server (main file)
-├── app.py                    # Original Gradio app
-├── requirements.txt          # Original Gradio requirements
-├── requirements_fastapi.txt  # FastAPI requirements
+├── server.py                 # FastAPI server (main entry point)
+├── requirements_fastapi.txt  # FastAPI dependencies
+├── requirements.txt          # Original Gradio dependencies
 ├── scripts/
 │   ├── setup_runpod.sh      # Setup script (dependencies installation)
 │   ├── RUNPOD_SETUP.sh      # RunPod full setup (clone + setup)
@@ -51,7 +50,9 @@ Server will be available at `http://localhost:8000`
 ├── docs/
 │   ├── README_FASTAPI.md    # Detailed API documentation
 │   ├── DEPLOY_RUNPOD.md     # RunPod deployment guide
-│   └── PROJECT_STRUCTURE.md  # Project structure documentation
+│   └── PROJECT_STRUCTURE.md # Project structure documentation
+├── examples/
+│   └── app.py               # Original Gradio app (for reference)
 └── src/
     └── chatterbox/          # Core TTS implementation
 ```
