@@ -9,7 +9,7 @@ import random
 import numpy as np
 import torch
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Literal
 import logging
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
@@ -148,6 +148,8 @@ app.add_middleware(
 )
 
 # Request/Response models
+
+# New simplified request model (HF Space style)
 class TTSRequest(BaseModel):
     text: str = Field(..., description="Text to synthesize (max 300 characters)", max_length=300)
     language_id: str = Field(..., description="Language code (e.g., 'en', 'tr', 'ar')")
@@ -156,6 +158,23 @@ class TTSRequest(BaseModel):
     temperature: float = Field(0.8, ge=0.05, le=5.0, description="Randomness in generation (0.05-5.0)")
     seed: int = Field(0, description="Random seed (0 for random)")
     cfg_weight: float = Field(0.5, ge=0.2, le=1.0, description="CFG/Pace weight (0.2-1.0)")
+
+# Legacy request model (Chatterbox-TTS-Server compatibility)
+class CustomTTSRequest(BaseModel):
+    """Request model for the custom /tts endpoint (backward compatibility)."""
+    text: str = Field(..., min_length=1, description="Text to be synthesized.")
+    voice_mode: Literal["predefined", "clone"] = Field("predefined", description="Voice mode")
+    predefined_voice_id: Optional[str] = Field(None, description="Filename of predefined voice")
+    reference_audio_filename: Optional[str] = Field(None, description="Filename of reference audio for cloning")
+    output_format: Optional[Literal["wav", "opus", "mp3"]] = Field("wav", description="Audio output format")
+    split_text: Optional[bool] = Field(True, description="Whether to split long text into chunks")
+    chunk_size: Optional[int] = Field(120, ge=50, le=500, description="Target chunk size")
+    temperature: Optional[float] = Field(None, description="Temperature override")
+    exaggeration: Optional[float] = Field(None, description="Exaggeration override")
+    cfg_weight: Optional[float] = Field(None, description="CFG weight override")
+    seed: Optional[int] = Field(None, description="Seed override")
+    speed_factor: Optional[float] = Field(None, description="Speed factor override")
+    language: Optional[str] = Field(None, description="Language code override")
 
 class LanguageResponse(BaseModel):
     languages: dict
@@ -374,6 +393,76 @@ async def generate_tts(request: TTSRequest):
         raise
     except Exception as e:
         logger.error(f"Error generating TTS: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate audio: {str(e)}")
+
+@app.post("/tts", tags=["TTS"], summary="Legacy /tts endpoint (backward compatibility)")
+async def legacy_tts_endpoint(request: CustomTTSRequest):
+    """
+    Legacy /tts endpoint for backward compatibility with Chatterbox-TTS-Server.
+    Converts CustomTTSRequest to TTSRequest format and calls generate_tts.
+    """
+    try:
+        # Resolve audio prompt path based on voice_mode
+        audio_prompt_path = None
+        if request.voice_mode == "predefined" and request.predefined_voice_id:
+            # Check if predefined voice exists in reference_audio directory
+            predefined_path = REFERENCE_AUDIO_DIR / request.predefined_voice_id
+            if predefined_path.exists():
+                audio_prompt_path = str(predefined_path)
+            else:
+                # Try to use language default
+                language_to_use = request.language or "en"
+                audio_prompt_path = LANGUAGE_CONFIG.get(language_to_use, {}).get("audio")
+        elif request.voice_mode == "clone" and request.reference_audio_filename:
+            clone_path = REFERENCE_AUDIO_DIR / request.reference_audio_filename
+            if clone_path.exists():
+                audio_prompt_path = str(clone_path)
+            else:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Reference audio file '{request.reference_audio_filename}' not found"
+                )
+        else:
+            # Use language default
+            language_to_use = request.language or "en"
+            audio_prompt_path = LANGUAGE_CONFIG.get(language_to_use, {}).get("audio")
+
+        # Handle text chunking if enabled
+        text_to_synthesize = request.text
+        if request.split_text and len(request.text) > request.chunk_size:
+            # Simple chunking by sentences (basic implementation)
+            sentences = text_to_synthesize.split('. ')
+            chunks = []
+            current_chunk = ""
+            for sentence in sentences:
+                if len(current_chunk) + len(sentence) < request.chunk_size:
+                    current_chunk += sentence + ". "
+                else:
+                    if current_chunk:
+                        chunks.append(current_chunk.strip())
+                    current_chunk = sentence + ". "
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+            text_to_synthesize = chunks[0] if chunks else text_to_synthesize  # Use first chunk for simplicity
+        
+        # Convert to TTSRequest format
+        tts_request = TTSRequest(
+            text=text_to_synthesize[:300],  # Max 300 chars
+            language_id=request.language or "en",
+            audio_prompt_path=audio_prompt_path,
+            exaggeration=request.exaggeration or 0.5,
+            temperature=request.temperature or 0.8,
+            seed=request.seed or 0,
+            cfg_weight=request.cfg_weight or 0.5
+        )
+        
+        # Call generate endpoint
+        return await generate_tts(tts_request)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in legacy /tts endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to generate audio: {str(e)}")
 
 if __name__ == "__main__":
