@@ -157,6 +157,10 @@ def default_audio_for_ui(lang: str) -> Optional[str]:
     """Get default audio URL for a language."""
     return LANGUAGE_CONFIG.get(lang, {}).get("audio")
 
+# Reference audio storage (defined before resolve_audio_prompt)
+REFERENCE_AUDIO_DIR = Path("./reference_audio")
+REFERENCE_AUDIO_DIR.mkdir(exist_ok=True)
+
 def resolve_audio_prompt(reference_filename: Optional[str]) -> Optional[str]:
     """
     Resolve reference audio filename to full path.
@@ -175,10 +179,6 @@ def resolve_audio_prompt(reference_filename: Optional[str]) -> Optional[str]:
             logger.warning(f"Reference audio file not found: {filename}")
             return None
     return None
-
-# Reference audio storage
-REFERENCE_AUDIO_DIR = Path("./reference_audio")
-REFERENCE_AUDIO_DIR.mkdir(exist_ok=True)
 
 # FastAPI app
 app = FastAPI(title="Chatterbox Multilingual TTS API", version="1.0.0")
