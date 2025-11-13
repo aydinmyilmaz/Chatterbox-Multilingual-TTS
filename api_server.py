@@ -159,13 +159,27 @@ def default_audio_for_ui(lang: str) -> Optional[str]:
 
 def resolve_audio_prompt(language_id: str, provided_path: Optional[str]) -> Optional[str]:
     """
-    Decide which audio prompt to use (same logic as Gradio app):
-    - If user provided a path, use it.
-    - Else, fall back to language-specific default (if any).
+    Decide which audio prompt to use:
+    - If user provided a path, use it (priority).
+    - We don't use default audio URLs - only user-uploaded files.
     """
     if provided_path and str(provided_path).strip():
+        # Check if it's a local file path
+        local_path = Path(provided_path)
+        if local_path.exists():
+            return str(local_path)
+        # Check if it's in reference_audio directory
+        ref_path = REFERENCE_AUDIO_DIR / local_path.name
+        if ref_path.exists():
+            return str(ref_path)
+        # Otherwise assume it's a URL or absolute path
         return provided_path
-    return LANGUAGE_CONFIG.get(language_id, {}).get("audio")
+    # Don't use default audio URLs - only user-uploaded files
+    return None
+
+# Reference audio storage
+REFERENCE_AUDIO_DIR = Path("./reference_audio")
+REFERENCE_AUDIO_DIR.mkdir(exist_ok=True)
 
 # FastAPI app
 app = FastAPI(title="Chatterbox Multilingual TTS API", version="1.0.0")
@@ -220,6 +234,79 @@ async def get_languages():
         "count": len(SUPPORTED_LANGUAGES)
     }
 
+# Upload reference audio
+@app.post("/upload_reference")
+async def upload_reference(files: list[UploadFile] = File(...)):
+    """
+    Upload reference audio file(s) for voice cloning.
+    Files are stored in the reference_audio directory.
+    Supported formats: WAV, MP3, FLAC, etc.
+    """
+    uploaded_files = []
+    upload_errors = []
+
+    for file in files:
+        if not file.filename:
+            upload_errors.append({"filename": "Unknown", "error": "File received with no filename."})
+            continue
+
+        # Sanitize filename
+        safe_filename = file.filename.replace(" ", "_").replace("/", "_").replace("\\", "_")
+        destination_path = REFERENCE_AUDIO_DIR / safe_filename
+
+        try:
+            # Validate file type
+            if not (
+                safe_filename.lower().endswith((".wav", ".mp3", ".flac", ".ogg", ".m4a"))
+            ):
+                raise ValueError("Invalid file type. Only audio files (.wav, .mp3, .flac, .ogg, .m4a) are allowed.")
+
+            # Save file
+            with open(destination_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+
+            logger.info(f"Uploaded reference audio: {safe_filename} ({len(content)} bytes)")
+            uploaded_files.append({
+                "filename": safe_filename,
+                "path": str(destination_path),
+                "size": len(content)
+            })
+
+        except Exception as e_upload:
+            error_msg = f"Error processing file '{file.filename}': {str(e_upload)}"
+            logger.error(error_msg, exc_info=True)
+            upload_errors.append({"filename": file.filename, "error": str(e_upload)})
+        finally:
+            await file.close()
+
+    # Get all current reference files
+    all_current_reference_files = []
+    for file_path in REFERENCE_AUDIO_DIR.glob("*"):
+        if file_path.is_file() and file_path.suffix.lower() in ['.wav', '.mp3', '.flac', '.ogg', '.m4a']:
+            all_current_reference_files.append(file_path.name)
+    all_current_reference_files = sorted(all_current_reference_files)
+
+    response_data = {
+        "message": f"Processed {len(files)} file(s).",
+        "uploaded_files": [f["filename"] for f in uploaded_files],
+        "all_reference_files": all_current_reference_files,
+        "errors": upload_errors,
+    }
+    status_code = 200 if not upload_errors or len(uploaded_files) > 0 else 400
+
+    return JSONResponse(content=response_data, status_code=status_code)
+
+# Get reference files
+@app.get("/reference_files")
+async def get_reference_files():
+    """Get list of uploaded reference audio files."""
+    files = []
+    for file_path in REFERENCE_AUDIO_DIR.glob("*"):
+        if file_path.is_file() and file_path.suffix.lower() in ['.wav', '.mp3', '.flac', '.ogg', '.m4a']:
+            files.append(file_path.name)
+    return sorted(files)
+
 # Generate TTS endpoint (using same code as Gradio app)
 @app.post("/generate")
 async def generate_tts(request: TTSRequest):
@@ -246,7 +333,7 @@ async def generate_tts(request: TTSRequest):
 
         logger.info(f"Generating audio for text: '{request.text[:50]}...' (lang: {request.language_id})")
 
-        # Handle optional audio prompt (same logic as Gradio app)
+        # Handle optional audio prompt (only user-uploaded files, no default URLs)
         chosen_prompt = resolve_audio_prompt(request.language_id, request.audio_prompt_path)
 
         # Prepare generation kwargs (same as Gradio app)
@@ -259,7 +346,7 @@ async def generate_tts(request: TTSRequest):
             generate_kwargs["audio_prompt_path"] = chosen_prompt
             logger.info(f"Using audio prompt: {chosen_prompt}")
         else:
-            logger.info("No audio prompt provided; using default voice")
+            logger.info("No audio prompt provided - model will use its default voice")
 
         # Generate audio (EXACT same code as Gradio app)
         wav = current_model.generate(
