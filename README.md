@@ -97,6 +97,11 @@ name: "my_voice"  # optional
 - **[docs/DEPLOY_RUNPOD.md](docs/DEPLOY_RUNPOD.md)** - RunPod deployment guide
 - **[docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)** - Project structure details
 
+### External Resources
+
+- **[Official Multilingual Documentation](https://chatterboxtts.com/docs/multilingual)** - Complete multilingual TTS guide with API reference, examples, and best practices
+- **[Hugging Face Space Demo](https://huggingface.co/spaces/ResembleAI/Chatterbox-Multilingual-TTS)** - Test the model interactively in your browser
+
 ## 🐳 RunPod Deployment
 
 **One-command setup:**
