@@ -535,40 +535,84 @@ async def get_predefined_voices_api():
 
 @app.post("/upload_reference", tags=["References"])
 async def upload_reference(
-    file: UploadFile = File(..., description="Audio file to upload"),
-    name: Optional[str] = Form(None, description="Custom filename (optional)")
+    files: List[UploadFile] = File(..., description="Audio files to upload (multiple files supported)")
 ):
     """
-    Upload a reference audio file for voice cloning.
+    Upload reference audio file(s) for voice cloning.
+    Backward compatible with Chatterbox-TTS-Server (uses 'files' parameter).
     Supported formats: WAV, MP3, FLAC, etc.
     """
-    try:
-        # Validate file type
-        if not file.content_type or not file.content_type.startswith("audio/"):
-            raise HTTPException(status_code=400, detail="File must be an audio file")
+    logger.info(f"Request to /upload_reference with {len(files)} file(s).")
+    uploaded_filenames_successfully: List[str] = []
+    upload_errors: List[Dict[str, str]] = []
 
-        # Determine filename
-        filename = name or file.filename
-        if not filename:
-            raise HTTPException(status_code=400, detail="Filename is required")
+    for file in files:
+        if not file.filename:
+            upload_errors.append(
+                {"filename": "Unknown", "error": "File received with no filename."}
+            )
+            logger.warning("Upload attempt with no filename.")
+            continue
 
-        # Save file
-        file_path = REFERENCE_AUDIO_DIR / filename
-        with open(file_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
+        # Sanitize filename
+        safe_filename = file.filename.replace(" ", "_").replace("/", "_").replace("\\", "_")
+        destination_path = REFERENCE_AUDIO_DIR / safe_filename
 
-        logger.info(f"Uploaded reference audio: {filename} ({len(content)} bytes)")
+        try:
+            # Validate file type
+            if not (
+                safe_filename.lower().endswith(".wav")
+                or safe_filename.lower().endswith(".mp3")
+                or safe_filename.lower().endswith(".flac")
+            ):
+                raise ValueError("Invalid file type. Only .wav, .mp3, and .flac are allowed.")
 
-        return {
-            "status": "success",
-            "filename": filename,
-            "path": str(file_path.relative_to(Path("."))),
-            "size": len(content)
-        }
-    except Exception as e:
-        logger.error(f"Error uploading reference audio: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
+            if destination_path.exists():
+                logger.info(
+                    f"Reference file '{safe_filename}' already exists. Skipping duplicate upload."
+                )
+                if safe_filename not in uploaded_filenames_successfully:
+                    uploaded_filenames_successfully.append(safe_filename)
+                continue
+
+            # Save file
+            with open(destination_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+            
+            logger.info(
+                f"Successfully saved uploaded reference file to: {destination_path}"
+            )
+            uploaded_filenames_successfully.append(safe_filename)
+
+        except Exception as e_upload:
+            error_msg = f"Error processing file '{file.filename}': {str(e_upload)}"
+            logger.error(error_msg, exc_info=True)
+            upload_errors.append({"filename": file.filename, "error": str(e_upload)})
+        finally:
+            await file.close()
+
+    # Get all current reference files (matching old server format)
+    all_current_reference_files = []
+    for file_path in REFERENCE_AUDIO_DIR.glob("*"):
+        if file_path.is_file() and file_path.suffix.lower() in ['.wav', '.mp3', '.flac']:
+            all_current_reference_files.append(file_path.name)
+    all_current_reference_files = sorted(all_current_reference_files)
+
+    response_data = {
+        "message": f"Processed {len(files)} file(s).",
+        "uploaded_files": uploaded_filenames_successfully,
+        "all_reference_files": all_current_reference_files,
+        "errors": upload_errors,
+    }
+    status_code = (
+        200 if not upload_errors or len(uploaded_filenames_successfully) > 0 else 400
+    )
+    if upload_errors:
+        logger.warning(
+            f"Upload to /upload_reference completed with {len(upload_errors)} error(s)."
+        )
+    return JSONResponse(content=response_data, status_code=status_code)
 
 @app.post("/upload_predefined_voice", tags=["File Management"])
 async def upload_predefined_voice_endpoint(files: List[UploadFile] = File(...)):
