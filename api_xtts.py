@@ -100,11 +100,12 @@ def get_or_load_model():
             raise
     return TTS_MODEL
 
-# FastAPI app
+# FastAPI app with lifespan handler
 app = FastAPI(
     title="Coqui TTS (XTTS v2) API",
     version="1.0.0",
-    description="Separate API endpoint for Coqui TTS XTTS v2 model"
+    description="Separate API endpoint for Coqui TTS XTTS v2 model",
+    lifespan=lifespan
 )
 
 # CORS middleware
@@ -127,15 +128,17 @@ class TTSRequest(BaseModel):
     cfg_weight: float = Field(0.5, ge=0.0, le=1.0, description="CFG/Pace weight (0.2-1.0)")
     chunk_size: Optional[int] = Field(300, ge=50, le=500, description="Chunk size for long texts (default: 300)")
 
-# Startup event - load model
-@app.on_event("startup")
-async def startup_event():
+# Lifespan event handler (replaces deprecated on_event)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """Load model on startup."""
     try:
         get_or_load_model()
         logger.info("✅ Model loaded on startup")
     except Exception as e:
         logger.error(f"❌ Failed to load model on startup: {e}")
+    yield
+    # Cleanup on shutdown if needed
 
 # Health check
 @app.get("/health")
@@ -283,7 +286,7 @@ async def generate_tts(request: TTSRequest):
     try:
         # Validate language (map language_id to XTTS language codes)
         language_id_lower = request.language_id.lower()
-        
+
         # Map Chatterbox language codes to XTTS language codes
         language_mapping = {
             "en": "en",
@@ -301,7 +304,7 @@ async def generate_tts(request: TTSRequest):
             "ja": "ja",
             "ko": "ko",
         }
-        
+
         xtts_language = language_mapping.get(language_id_lower)
         if not xtts_language:
             # Try direct match
@@ -311,12 +314,12 @@ async def generate_tts(request: TTSRequest):
                     detail=f"Unsupported language_id '{request.language_id}'. Supported: {', '.join(language_mapping.keys())}"
                 )
             xtts_language = language_id_lower
-        
+
         # Get model
         tts_model = get_or_load_model()
         if tts_model is None:
             raise HTTPException(status_code=503, detail="TTS model is not loaded")
-        
+
         # Resolve reference audio filename to full path (same as Chatterbox TTS)
         audio_prompt_path = None
         if request.reference_audio_filename:
@@ -326,13 +329,13 @@ async def generate_tts(request: TTSRequest):
                     status_code=404,
                     detail=f"Reference audio file '{request.reference_audio_filename}' not found. Please upload it first via /upload_reference"
                 )
-        
+
         if not audio_prompt_path:
             raise HTTPException(
                 status_code=400,
                 detail="reference_audio_filename is required for XTTS v2"
             )
-        
+
         # Handle long texts by chunking (same as Chatterbox TTS)
         chunk_size_to_use = request.chunk_size if request.chunk_size is not None else 300
         if len(request.text) > chunk_size_to_use:
@@ -355,19 +358,19 @@ async def generate_tts(request: TTSRequest):
                 text_chunks.append(current_chunk.strip())
         else:
             text_chunks = [request.text]
-        
+
         logger.info(f"Generating audio for text: '{request.text[:50]}...' (lang: {request.language_id}, chunks: {len(text_chunks)})")
-        
+
         # Process each chunk and concatenate audio
         all_audio_segments = []
         sample_rate = None
-        
+
         for i, chunk in enumerate(text_chunks):
             logger.info(f"Synthesizing chunk {i+1}/{len(text_chunks)} ({len(chunk)} chars)...")
-            
+
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
                 tmp_path = tmp_file.name
-            
+
             try:
                 tts_model.tts_to_file(
                     text=chunk[:300] if len(chunk) > 300 else chunk,  # XTTS also has 300 char limit
@@ -375,37 +378,37 @@ async def generate_tts(request: TTSRequest):
                     speaker_wav=audio_prompt_path,
                     language=xtts_language
                 )
-                
+
                 # Read generated audio
                 chunk_audio_data, chunk_sample_rate = sf.read(tmp_path)
-                
+
                 # Convert to mono if stereo
                 if len(chunk_audio_data.shape) > 1:
                     chunk_audio_data = chunk_audio_data[:, 0]
-                
+
                 if sample_rate is None:
                     sample_rate = chunk_sample_rate
-                
+
                 all_audio_segments.append(chunk_audio_data)
             finally:
                 # Clean up temp file
                 if os.path.exists(tmp_path):
                     os.unlink(tmp_path)
-        
+
         # Concatenate all chunks
         if len(all_audio_segments) > 1:
             final_audio = np.concatenate(all_audio_segments)
             logger.info(f"Concatenated {len(all_audio_segments)} audio chunks")
         else:
             final_audio = all_audio_segments[0]
-        
+
         logger.info(f"Audio generation complete. Sample rate: {sample_rate}Hz, Length: {len(final_audio)} samples")
-        
+
         # Create audio buffer
         audio_buffer = io.BytesIO()
         sf.write(audio_buffer, final_audio, sample_rate, format="WAV")
         audio_buffer.seek(0)
-        
+
         return StreamingResponse(
             audio_buffer,
             media_type="audio/wav",
@@ -414,7 +417,7 @@ async def generate_tts(request: TTSRequest):
                 "X-Sample-Rate": str(sample_rate)
             }
         )
-    
+
     except HTTPException:
         raise
     except Exception as e:
