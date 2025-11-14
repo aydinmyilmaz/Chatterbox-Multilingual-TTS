@@ -104,6 +104,18 @@ def get_or_load_model():
             raise
     return TTS_MODEL
 
+# Lifespan event handler (replaces deprecated on_event)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load model on startup."""
+    try:
+        get_or_load_model()
+        logger.info("✅ Model loaded on startup")
+    except Exception as e:
+        logger.error(f"❌ Failed to load model on startup: {e}")
+    yield
+    # Cleanup on shutdown if needed
+
 # FastAPI app with lifespan handler
 app = FastAPI(
     title="Coqui TTS (XTTS v2) API",
@@ -131,18 +143,6 @@ class TTSRequest(BaseModel):
     seed: int = Field(0, description="Random seed (0 for random)")
     cfg_weight: float = Field(0.5, ge=0.0, le=1.0, description="CFG/Pace weight (0.2-1.0)")
     chunk_size: Optional[int] = Field(300, ge=50, le=500, description="Chunk size for long texts (default: 300)")
-
-# Lifespan event handler (replaces deprecated on_event)
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Load model on startup."""
-    try:
-        get_or_load_model()
-        logger.info("✅ Model loaded on startup")
-    except Exception as e:
-        logger.error(f"❌ Failed to load model on startup: {e}")
-    yield
-    # Cleanup on shutdown if needed
 
 # Health check
 @app.get("/health")
