@@ -3,7 +3,8 @@
 
 # Core dependencies
 setuptools>=65.0.0
-numpy>=1.24.0,<1.26.0
+# Note: TTS==0.22.0 requires numpy==1.22.0 for Python < 3.11
+numpy==1.22.0
 soundfile
 
 # FastAPI and web server
@@ -21,4 +22,5 @@ TTS==0.22.0
 # torch
 # torchvision
 # torchaudio
+
 
